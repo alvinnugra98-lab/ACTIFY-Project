@@ -18,8 +18,10 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({ data }) => {
   });
 
   const sendSingleWA = (emp: EmployeeActingData) => {
-    const message = `Halo Tim HR, reminder untuk masa Acting Karyawan: *${emp.name}* (${emp.dept}) yang akan berakhir pada *${emp.endDate}*. Mohon segera diproses.`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+    const formattedDate = new Date(emp.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const message = `Halo Tim HR, reminder untuk masa Acting Karyawan: *${emp.name}* (${emp.dept}) yang akan berakhir pada *${formattedDate}*. Mohon segera diproses.`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
 
   const getStatusBadge = (emp: EmployeeActingData) => {

@@ -10,13 +10,19 @@ const App: React.FC = () => {
   const [data, setData] = useState<EmployeeActingData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [showNotification, setShowNotification] = useState<{show: boolean, msg: string}>({show: false, msg: ''});
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const actingData = await fetchActingData();
-    setData(actingData);
-    setLastUpdated(new Date());
-    setLoading(false);
+    try {
+      const actingData = await fetchActingData();
+      setData(actingData);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error("Failed to sync data", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -32,31 +38,65 @@ const App: React.FC = () => {
     expired: data.filter(d => d.status === ActingStatus.EXPIRED).length,
   };
 
+  const triggerNotification = (msg: string) => {
+    setShowNotification({show: true, msg});
+    setTimeout(() => setShowNotification({show: false, msg: ''}), 3000);
+  };
+
   const sendWhatsAppBroadcast = () => {
+    if (loading) return;
+
     const expiringSoon = data.filter(d => d.status === ActingStatus.EXPIRING_SOON);
-    if (expiringSoon.length === 0) {
-      alert("Tidak ada karyawan dengan status Expiring Soon saat ini.");
+    const expired = data.filter(d => d.status === ActingStatus.EXPIRED);
+    
+    if (expiringSoon.length === 0 && expired.length === 0) {
+      triggerNotification("Tidak ada data 'Expiring Soon' atau 'Expired'.");
       return;
     }
 
     let message = `*REMINDER: ACTIFY HR REPORT*\n`;
-    message += `Halo Tim HR, berikut daftar karyawan dengan masa Acting yang akan segera berakhir (Expiring Soon):\n\n`;
+    message += `Halo Tim HR, berikut update status masa Acting karyawan yang perlu diperhatikan:\n\n`;
     
-    expiringSoon.forEach((emp, index) => {
-      message += `${index + 1}. *${emp.name}*\n`;
-      message += `   Dept: ${emp.dept}\n`;
-      message += `   End Date: ${emp.endDate}\n\n`;
-    });
+    if (expiringSoon.length > 0) {
+      message += `⚠️ *EXPIRING SOON (Masa Acting Segera Berakhir):*\n`;
+      expiringSoon.forEach((emp, index) => {
+        message += `${index + 1}. *${emp.name}* (${emp.dept})\n`;
+        message += `   Jabatan: ${emp.position}\n`;
+        message += `   End Date: ${new Date(emp.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}\n`;
+      });
+      message += `\n`;
+    }
 
-    message += `Mohon segera ditindaklanjuti. Terima kasih.`;
+    if (expired.length > 0) {
+      message += `🚫 *EXPIRED (Masa Acting Sudah Berakhir):*\n`;
+      expired.forEach((emp, index) => {
+        message += `${index + 1}. *${emp.name}* (${emp.dept})\n`;
+        message += `   Jabatan: ${emp.position}\n`;
+        message += `   End Date: ${new Date(emp.endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}\n`;
+      });
+      message += `\n`;
+    }
+
+    message += `Mohon segera ditindaklanjuti untuk status kepegawaiannya. Terima kasih.`;
     
     const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+    const waUrl = `https://api.whatsapp.com/send?text=${encodedMessage}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div className="min-h-screen pb-20 selection:bg-[#1DB954] selection:text-black">
-      {/* Premium Navbar - Logo Removed */}
+    <div className="min-h-screen pb-20 selection:bg-[#1DB954] selection:text-black bg-[#121212] text-white">
+      {/* Toast Notification */}
+      {showNotification.show && (
+        <div className="fixed top-24 right-8 z-[100] bg-zinc-800 border border-zinc-700 text-white px-6 py-3 rounded-xl shadow-2xl animate-bounce flex items-center gap-3">
+          <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span className="text-sm font-bold uppercase tracking-tight">{showNotification.msg}</span>
+        </div>
+      )}
+
+      {/* Premium Navbar */}
       <nav className="bg-black/60 backdrop-blur-xl border-b border-white/5 px-8 py-5 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -93,7 +133,8 @@ const App: React.FC = () => {
           
           <button 
             onClick={sendWhatsAppBroadcast}
-            className="flex items-center gap-3 bg-[#1DB954] hover:bg-[#1ed760] text-black px-6 py-3 rounded-full font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_-5px_rgba(29,185,84,0.4)]"
+            disabled={loading}
+            className={`flex items-center gap-3 px-6 py-3 rounded-full font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 shadow-[0_10px_20px_-5px_rgba(29,185,84,0.4)] ${loading ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' : 'bg-[#1DB954] hover:bg-[#1ed760] text-black'}`}
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
